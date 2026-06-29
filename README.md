@@ -71,12 +71,45 @@
 
 ## 二、安装
 
+### 1. 获取代码
+
 ```bash
+git clone https://github.com/CrownTsui/astock-watch.git
 cd astock-watch
+```
+
+### 2. 创建虚拟环境（推荐，避免污染全局依赖）
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+```
+
+### 3. 安装依赖
+
+```bash
 pip install -r requirements.txt
 ```
 
-需要 Python 3.9+。核心依赖：akshare / pandas / numpy / scipy / jinja2。可选：snownlp（情感增强，缺失自动降级）。
+需要 **Python 3.9+**。核心依赖：akshare / pandas / numpy / scipy / jinja2。可选：snownlp（情感增强，缺失自动降级，不影响运行）。
+
+### 4. 验证安装
+
+```bash
+python run.py --symbol 600519 --open
+```
+
+若浏览器自动弹出一份贵州茅台的分析报告，即安装成功。首次运行需联网拉取行情数据；若报告标注「模拟数据」，多为网络或盘前接口问题，可换网络稍后重试（见第九节 FAQ）。
+
+### 5.（可选）作为 Claude Code Skill 安装
+
+本仓库自带 `SKILL.md`，可直接作为 Claude Code 技能使用：把整个目录放到 Claude 技能目录即可，之后在对话中说「帮我盯盘 600519」会自动触发。
+
+```bash
+# macOS / Linux 示例
+git clone https://github.com/CrownTsui/astock-watch.git ~/.claude/skills/astock-watch
+cd ~/.claude/skills/astock-watch && pip install -r requirements.txt
+```
 
 ---
 
@@ -92,6 +125,8 @@ python run.py --symbol 600519 --date 20260628      # 指定历史交易日
 python run.py --symbol 600519 --out-dir reports --open   # 指定目录并自动打开
 ```
 
+> 代码无需带交易所前缀，沪深北均可（如 `600519` / `000858` / `300750` / `688981`），程序自动识别。
+
 | 参数 | 说明 |
 |------|------|
 | `-s, --symbol` | 股票代码，逗号分隔 |
@@ -100,6 +135,18 @@ python run.py --symbol 600519 --out-dir reports --open   # 指定目录并自动
 | `-o, --out-dir` | 报告输出目录（默认 `reports/`） |
 | `--open` | 生成后自动用浏览器打开 |
 | `--offline` | 内联本地资源生成完全离线报告（先运行 `python -m astock_watch.assets`） |
+
+### 查看报告
+
+运行完成后，报告生成在输出目录（默认 `reports/`）：
+
+```
+reports/
+├── astock_watch_600519_20260629_160644.html      # 个股报告
+└── astock_watch_summary_20260629_160644.html      # 多股汇总页（分析 ≥2 只时生成）
+```
+
+文件名格式为 `astock_watch_<代码>_<日期>_<时间>.html`，**双击即可用浏览器打开**，无需启动任何服务；加 `--open` 则生成后自动打开。报告默认从 CDN 加载图表库，首次打开需联网；无网环境请改用 `--offline`（见第八节）。
 
 ### 编程接口
 
