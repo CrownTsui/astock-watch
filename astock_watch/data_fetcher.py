@@ -21,7 +21,6 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-import numpy as np
 import pandas as pd
 
 from . import config as C
@@ -56,11 +55,14 @@ class DataFetcher:
     # ============================================================
     @retry(times=C.REQUEST_RETRY, backoff=C.RETRY_BACKOFF, default=None)
     def fetch_kline(self, code: str, end_date: Optional[str] = None,
-                    days: int = C.KLINE_DAYS, is_fund: bool = False) -> Optional[pd.DataFrame]:
+                    days: int = C.KLINE_DAYS, is_fund: bool = False,
+                    market: str = "sh") -> Optional[pd.DataFrame]:
         """前复权日 K 线。end_date 形如 '20260629'，默认取最新交易日。
 
-        股票用 stock_zh_a_hist，ETF/基金用 fund_etf_hist_em，二者互为兜底，
-        列结构一致，便于下游统一处理。
+        多数据源互为兜底，按顺序尝试直到拿到真实数据：
+          - 东方财富：股票 stock_zh_a_hist / ETF fund_etf_hist_em（含 end_date 过滤、qfq）
+          - 新浪    ：股票 stock_zh_a_daily / ETF fund_etf_hist_sina（不同服务器，绕开东财限流）
+        东财历史接口高频请求时常返回 RemoteDisconnected，新浪源作为关键兜底保证真实数据可得。
         """
         if ak is None:
             return None
@@ -68,31 +70,51 @@ class DataFetcher:
         # 多预留日历日以覆盖足够交易日（含周末/节假日）
         start_dt = dt.datetime.strptime(end, "%Y%m%d") - dt.timedelta(days=int(days * 1.7))
         start = start_dt.strftime("%Y%m%d")
+        symbol = f"{market}{code}"                    # 新浪接口需带市场前缀，如 sh515030
 
-        def _stock():
+        def _em_stock():
             return ak.stock_zh_a_hist(symbol=code, period="daily",
                                       start_date=start, end_date=end, adjust="qfq")
 
-        def _etf():
+        def _em_etf():
             return ak.fund_etf_hist_em(symbol=code, period="daily",
                                        start_date=start, end_date=end, adjust="qfq")
 
+        def _sina_stock():
+            return ak.stock_zh_a_daily(symbol=symbol, adjust="qfq")
+
+        def _sina_etf():
+            return ak.fund_etf_hist_sina(symbol=symbol)
+
+        sources = ([_em_etf, _sina_etf, _em_stock, _sina_stock] if is_fund
+                   else [_em_stock, _sina_stock, _em_etf, _sina_etf])
         raw = None
-        for fn in ([_etf, _stock] if is_fund else [_stock, _etf]):
+        for fn in sources:
             try:
                 raw = fn()
                 if raw is not None and not raw.empty:
                     break
-            except Exception:                        # noqa: BLE001  —— 换下一个接口
+            except Exception:                        # noqa: BLE001  —— 换下一个数据源
                 continue
         if raw is None or raw.empty:
             return None
+        # 东财列名为中文需映射；新浪本就是英文列，rename 不影响
         df = raw.rename(columns=_KLINE_COLS)
         keep = [c for c in ["date", "open", "high", "low", "close",
                             "volume", "amount", "pct_chg", "turnover"] if c in df.columns]
         df = df[keep].copy()
         df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
         df = df.sort_values("date").reset_index(drop=True)
+        # 新浪接口返回全量历史且不按 end 过滤，这里统一按分析日截断
+        end_iso = dt.datetime.strptime(end, "%Y%m%d").strftime("%Y-%m-%d")
+        df = df[df["date"] <= end_iso].reset_index(drop=True)
+        # 新浪换手率为小数比例（如 0.0024），东财为百分比（如 0.24）；统一成百分比
+        if "turnover" in df.columns and df["turnover"].notna().any() \
+                and df["turnover"].median() < 1:
+            df["turnover"] = df["turnover"] * 100
+        # 新浪源无涨跌幅列，用收盘价补算，保证下游/报告口径一致
+        if "pct_chg" not in df.columns:
+            df["pct_chg"] = df["close"].pct_change() * 100
         return df.tail(days).reset_index(drop=True)
 
     def fetch_basic(self, code: str, is_fund: bool = False) -> dict:
@@ -249,100 +271,46 @@ class DataFetcher:
         return items[:15]
 
     # ============================================================
-    # 模拟兜底
-    # ============================================================
-    @staticmethod
-    def _mock_kline(code: str, days: int = 250) -> pd.DataFrame:
-        """确定性随机游走模拟 K 线（断网演示用）。以代码为随机种子，结果可复现。"""
-        seed = int("".join(ch for ch in code if ch.isdigit())[-6:] or "1")
-        rng = np.random.default_rng(seed)
-        base = 10 + seed % 90                       # 初始价格 10~100
-        drift = rng.uniform(-0.0004, 0.0008)        # 轻微趋势
-        rets = rng.normal(drift, 0.018, days)       # 日收益
-        close = base * np.exp(np.cumsum(rets))
-        dates = pd.bdate_range(end=dt.date.today(), periods=days).strftime("%Y-%m-%d")
-        open_ = close * (1 + rng.normal(0, 0.006, days))
-        high = np.maximum(open_, close) * (1 + np.abs(rng.normal(0, 0.008, days)))
-        low = np.minimum(open_, close) * (1 - np.abs(rng.normal(0, 0.008, days)))
-        vol = rng.integers(2_000, 200_000, days).astype(float)
-        df = pd.DataFrame({
-            "date": dates, "open": open_, "high": high, "low": low,
-            "close": close, "volume": vol,
-        })
-        df["amount"] = df["close"] * df["volume"] * 100
-        df["pct_chg"] = df["close"].pct_change() * 100
-        df["turnover"] = rng.uniform(0.5, 8, days)
-        return df
-
-    @staticmethod
-    def _mock_capital(kline: pd.DataFrame) -> pd.DataFrame:
-        """与模拟 K 线涨跌方向弱相关的模拟资金流。"""
-        tail = kline.tail(C.CAPITAL_DAYS).copy().reset_index(drop=True)
-        rng = np.random.default_rng(len(tail) + 7)
-        sign = np.sign(tail["pct_chg"].fillna(0).values)
-        main = sign * rng.uniform(1e6, 5e7, len(tail)) + rng.normal(0, 8e6, len(tail))
-        out = pd.DataFrame({
-            "date": tail["date"], "close": tail["close"], "pct_chg": tail["pct_chg"],
-            "main_net": main,
-            "xl_net": main * 0.6, "lg_net": main * 0.4,
-            "md_net": -main * 0.3, "sm_net": -main * 0.7,
-            "main_pct": main / (tail["close"] * tail["volume"] * 100 + 1) * 100,
-        })
-        return out
-
-    # ============================================================
     # 汇总
     # ============================================================
     def fetch_all(self, code: str, analysis_date: Optional[str] = None) -> dict:
-        """抓取一支股票的全部数据，返回标准化字典。"""
+        """抓取一支股票的全部数据，返回标准化字典。
+
+        强约束：行情为分析的基石，必须是真实数据。多数据源（东财+新浪）全部失败时
+        直接抛出异常，由上层跳过该标的——禁止使用任何模拟/伪造数据。
+        """
         meta = normalize_code(code)
         is_fund = meta.get("is_fund", False)
-        is_mock = False
         sources = {}
 
-        # —— 行情（核心，决定是否走模拟）——
-        kline = self.fetch_kline(meta["code"], end_date=analysis_date, is_fund=is_fund)
+        # —— 行情（核心，必须真实，多源兜底）——
+        kline = self.fetch_kline(meta["code"], end_date=analysis_date,
+                                 is_fund=is_fund, market=meta["market"])
         if kline is None or kline.empty or len(kline) < 30:
-            logger.warning("行情抓取失败/不足，启用模拟数据兜底：%s", code)
-            kline = self._mock_kline(meta["code"])
-            is_mock = True
-            sources["kline"] = "模拟数据"
-        else:
-            sources["kline"] = "东方财富(akshare)"
+            raise RuntimeError(
+                f"{code} 行情数据抓取失败（已尝试东方财富+新浪多源），"
+                f"按要求不使用模拟数据，跳过该标的")
+        sources["kline"] = "东方财富/新浪(akshare)"
 
         # —— 基本信息 ——
-        basic = self.fetch_basic(meta["code"], is_fund=is_fund) if not is_mock else {}
+        basic = self.fetch_basic(meta["code"], is_fund=is_fund)
         name = (basic.get("name") or f"{'基金' if is_fund else '股票'}{meta['code']}")
 
-        # —— 资金面 ——
-        if is_mock:
-            capital = self._mock_capital(kline)
-            sources["capital"] = "模拟数据"
-        else:
-            capital = self.fetch_capital_flow(meta["code"], meta["market"])
-            sources["capital"] = ("东方财富(akshare)" if capital is not None
-                                  else ("ETF/基金无个股资金流口径" if is_fund else "无数据"))
+        # —— 资金面（ETF 无个股资金流口径属正常，非模拟）——
+        capital = self.fetch_capital_flow(meta["code"], meta["market"])
+        sources["capital"] = ("东方财富(akshare)" if capital is not None
+                              else ("ETF/基金无个股资金流口径" if is_fund else "无数据"))
 
-        north = self.fetch_north_hold(meta["code"]) if not is_mock else None
+        north = self.fetch_north_hold(meta["code"])
         sources["north"] = "沪深股通(akshare)" if north is not None else "无数据/已停披露"
 
         # —— 消息面 ——
-        if is_mock:
-            news = [{
-                "title": f"【模拟】{name}经营稳健，行业景气度维持",
-                "summary": "此为断网演示用占位资讯，非真实新闻。",
-                "time": dt.date.today().strftime("%Y-%m-%d"),
-                "source": "模拟", "url": "", "kind": "news",
-            }]
-            notices = []
-            sources["news"] = "模拟数据"
-        else:
-            news = self.fetch_news(meta["code"])
-            notices = self.fetch_notices(meta["code"])
-            sources["news"] = "东方财富(akshare)" if news else "无数据"
+        news = self.fetch_news(meta["code"])
+        notices = self.fetch_notices(meta["code"])
+        sources["news"] = "东方财富(akshare)" if news else "无数据"
 
         return {
-            "meta": {**meta, "name": name, "is_mock": is_mock,
+            "meta": {**meta, "name": name, "is_mock": False,
                      "analysis_date": analysis_date, "sources": sources},
             "basic": basic,
             "kline": kline,

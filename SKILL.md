@@ -20,6 +20,9 @@ description: >
 # 安装依赖（首次）
 pip install -r requirements.txt
 
+# 不带任何参数：默认分析自选股（watchlist.txt 中的标的）
+python run.py
+
 # 单只股票
 python run.py --symbol 600519
 
@@ -31,6 +34,9 @@ python run.py --symbol 600519 --date 20260628 --open
 ```
 
 报告默认输出到 `reports/astock_watch_<代码>_<时间戳>.html`，双击即可在浏览器打开。
+
+> 💡 **默认自选股**：直接运行 `python run.py`（不传 `--symbol`/`--file`）时，会读取 skill 根目录下的
+> `watchlist.txt` 并分析其中全部标的。编辑该文件即可维护自己的盯盘池。
 
 ## 分析维度
 

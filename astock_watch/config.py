@@ -105,8 +105,9 @@ BACKTEST_MIN_BARS = 80       # 少于该根数不做回测
 # ============================ 数据抓取配置 ============================
 
 REQUEST_TIMEOUT = 12          # 单接口超时（秒）
-REQUEST_RETRY = 2             # 失败重试次数
-RETRY_BACKOFF = 1.5           # 重试退避基数（秒）
+REQUEST_RETRY = 3             # 失败重试次数（东财限流时多试几次）
+RETRY_BACKOFF = 2.0           # 重试退避基数（秒）
+REQUEST_GAP = 0.8             # 相邻股票请求间隔（秒），降低被限流概率
 KLINE_DAYS = 400              # 默认拉取的日线根数（足够算 MA250）
 NEWS_DAYS = 7                 # 消息面回溯天数
 CAPITAL_DAYS = 10             # 资金流展示天数

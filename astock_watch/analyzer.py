@@ -205,8 +205,11 @@ def analyze_many(codes, analysis_date=None, out_dir=".", make_summary=True, offl
     结果列表为 [(code, 报告路径或 'ERROR: ...'), ...]；成功分析 ≥2 支时生成横向对比汇总页。
     offline=True 时所有报告与汇总页内联本地资源，完全离线可打开。
     """
+    import time
     results, items = [], []
-    for code in codes:
+    for idx, code in enumerate(codes):
+        if idx > 0:
+            time.sleep(C.REQUEST_GAP)                # 相邻请求间隔，降低东财限流概率
         try:
             a = StockAnalyzer(code, analysis_date=analysis_date, out_dir=out_dir)
             path = a.run(offline=offline)

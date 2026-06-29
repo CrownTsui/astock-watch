@@ -14,9 +14,24 @@ import sys
 import webbrowser
 
 # 允许在任意目录下直接 `python run.py` 运行
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
 
 from astock_watch.analyzer import analyze_many  # noqa: E402
+
+# 默认自选股池：无任何传参时分析此文件中的标的
+DEFAULT_WATCHLIST = os.path.join(SCRIPT_DIR, "watchlist.txt")
+
+
+def read_codes_from_file(path):
+    """从股票池文件读取代码：每行一个，# 开头为注释，取每行首个空白前的字段。"""
+    codes = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                codes.append(line.split()[0])
+    return codes
 
 
 def main():
@@ -38,18 +53,25 @@ def main():
     codes = []
     if args.file:
         try:
-            with open(args.file, encoding="utf-8") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if line and not line.startswith("#"):
-                        codes.append(line.split()[0])
+            codes += read_codes_from_file(args.file)
         except OSError as e:
             print(f"✗ 读取股票池文件失败：{e}")
             sys.exit(1)
     codes += [c.strip() for c in args.symbol.replace("，", ",").split(",") if c.strip()]
     codes = list(dict.fromkeys(codes))  # 去重并保持顺序
+
+    # 未显式指定股票时，回退到默认自选股池
+    if not codes and os.path.exists(DEFAULT_WATCHLIST):
+        try:
+            codes = read_codes_from_file(DEFAULT_WATCHLIST)
+            if codes:
+                print(f"ℹ 未指定股票，默认分析自选股（{DEFAULT_WATCHLIST}）")
+        except OSError as e:
+            print(f"✗ 读取默认自选股失败：{e}")
+            sys.exit(1)
+
     if not codes:
-        print("✗ 未提供股票代码：请用 --symbol 或 --file 指定")
+        print("✗ 未提供股票代码：请用 --symbol / --file 指定，或在 watchlist.txt 写入自选股")
         sys.exit(1)
 
     print(f"▶ 开始分析 {len(codes)} 支股票：{', '.join(codes)}")
