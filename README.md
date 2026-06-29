@@ -101,14 +101,20 @@ python run.py --symbol 600519 --open
 
 若浏览器自动弹出一份贵州茅台的分析报告，即安装成功。首次运行需联网拉取行情数据；若报告标注「模拟数据」，多为网络或盘前接口问题，可换网络稍后重试（见第九节 FAQ）。
 
-### 5.（可选）作为 Claude Code Skill 安装
+### 5.（可选）作为 Agent Skill 安装
 
-本仓库自带 `SKILL.md`，可直接作为 Claude Code 技能使用：把整个目录放到 Claude 技能目录即可，之后在对话中说「帮我盯盘 600519」会自动触发。
+本仓库自带 `SKILL.md`，符合 [Agent Skills Standard](https://skills.sh)，可在任何 skills-compatible runtime（Claude Code / Codex / Cursor / OpenClaw 等）中使用。安装方式：把仓库目录放到对应 runtime 的技能目录即可，之后在对话中说「帮我盯盘 600519」会自动触发。
 
 ```bash
-# macOS / Linux 示例
-git clone https://github.com/CrownTsui/astock-watch.git ~/.claude/skills/astock-watch
-cd ~/.claude/skills/astock-watch && pip install -r requirements.txt
+# 一行安装（自动检测 runtime 技能目录）
+SKILL_DIR="${CLAUDE_SKILLS:-${CODEX_SKILLS:-${CURSOR_SKILLS:-~/.claude/skills}}}"
+git clone https://github.com/CrownTsui/astock-watch.git "$SKILL_DIR/astock-watch"
+cd "$SKILL_DIR/astock-watch" && pip install -r requirements.txt
+
+# 手动指定路径（各 runtime 默认技能目录参考）
+# Claude Code : ~/.claude/skills/
+# Codex       : ~/.codex/skills/
+# Cursor      : ~/.cursor/skills/
 ```
 
 ---
