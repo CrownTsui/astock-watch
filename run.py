@@ -43,8 +43,8 @@ def main():
                    help="股票池文件，每行一个代码（# 开头为注释行）")
     p.add_argument("-d", "--date", dest="date", default=None,
                    help="分析日期 YYYYMMDD，默认最近交易日")
-    p.add_argument("-o", "--out-dir", dest="out_dir", default="reports",
-                   help="报告输出目录（默认 reports/）")
+    p.add_argument("-o", "--out-dir", dest="out_dir", default=os.path.expanduser("~/Downloads/astock-watch-reports"),
+                   help="报告输出目录（默认 ~/Downloads/astock-watch-reports/）")
     p.add_argument("--open", action="store_true", help="生成后自动用浏览器打开")
     p.add_argument("--offline", action="store_true",
                    help="内联本地资源生成完全离线报告（需先运行 python -m astock_watch.assets 下载）")
