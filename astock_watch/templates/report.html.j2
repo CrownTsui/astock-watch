@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ header.name }}({{ header.code }}) 盯盘分析报告 · {{ header.date }}</title>
+{% if offline and assets.plotly_js %}<script>{{ assets.plotly_js | safe }}</script>
+{% else %}<script src="{{ cdn.plotly_js }}"></script>{% endif %}
+{% if offline and assets.bootstrap_css %}<style>{{ assets.bootstrap_css | safe }}</style>
+{% else %}<link href="{{ cdn.bootstrap_css }}" rel="stylesheet">
+<link href="{{ cdn.font }}" rel="stylesheet">{% endif %}
+<style>
+  :root{ --up:{{ color.up }}; --down:{{ color.down }}; --neutral:{{ color.neutral }}; }
+  body{ font-family:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif; background:#f4f6f9; color:#2c3e50; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:18px; }
+  .hero{ background:linear-gradient(135deg,#1f3a5f 0%,#2c5282 100%); color:#fff;
+         border-radius:16px; padding:24px 28px; box-shadow:0 6px 20px rgba(31,58,95,.25); }
+  .hero .price{ font-size:2.4rem; font-weight:700; line-height:1; }
+  .card-x{ background:#fff; border-radius:14px; box-shadow:0 2px 12px rgba(0,0,0,.06);
+           padding:20px; margin-top:18px; }
+  .sec-title{ font-weight:700; font-size:1.15rem; border-left:4px solid #2c5282;
+              padding-left:10px; margin-bottom:14px; }
+  .up{ color:var(--up); } .down{ color:var(--down); }
+  .tone-pos{ background:var(--up); color:#fff; }
+  .tone-neg{ background:var(--down); color:#fff; }
+  .tone-neutral{ background:var(--neutral); color:#fff; }
+  .badge-x{ display:inline-block; padding:2px 9px; border-radius:10px; font-size:.78rem; font-weight:500; }
+  .metric{ text-align:center; padding:8px; }
+  .metric .v{ font-size:1.5rem; font-weight:700; } .metric .l{ font-size:.8rem; color:#7f8c8d; }
+  .action-box{ text-align:center; border-radius:12px; padding:18px; color:#fff; }
+  .ring{ width:104px; height:104px; border-radius:50%; display:flex; align-items:center;
+         justify-content:center; flex-direction:column; color:#fff; margin:0 auto; }
+  .ring .n{ font-size:2rem; font-weight:700; line-height:1; } .ring .t{ font-size:.72rem; }
+  .prob-label{ width:48px; display:inline-block; font-size:.85rem; }
+  .lv-table td{ padding:6px 10px; } .lv-table .k{ color:#7f8c8d; }
+  .signal{ border:1px solid #eee; border-radius:10px; padding:10px 12px; height:100%; }
+  .signal .nm{ font-weight:700; } .news-item{ border-bottom:1px solid #f0f0f0; padding:9px 0; }
+  .news-item a{ color:#2c3e50; text-decoration:none; } .news-item a:hover{ color:#2c5282; }
+  .mock-warn{ background:#fff3cd; border:1px solid #ffe69c; color:#664d03;
+              border-radius:10px; padding:10px 16px; margin-top:14px; font-weight:500; }
+  .disc{ font-size:.8rem; color:#95a5a6; margin-top:22px; line-height:1.7; }
+  .src-pill{ font-size:.72rem; color:#7f8c8d; background:#f0f2f5; border-radius:8px; padding:1px 7px; margin-right:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  {# ============ 头部 ============ #}
+  <div class="hero d-flex justify-content-between align-items-center flex-wrap">
+    <div>
+      <div style="font-size:1.7rem;font-weight:700;">{{ header.name }}
+        <span style="font-size:1rem;opacity:.8;">{{ header.code }}.{{ header.market }}</span></div>
+      <div style="opacity:.85;margin-top:4px;">行业：{{ header.industry }} ｜ 报告日期：{{ header.date }}</div>
+    </div>
+    <div class="text-end">
+      {% set pc = header.pct_chg or 0 %}
+      <div class="price {{ 'up' if pc>=0 else 'down' }}" style="color:#fff;">{{ header.close }}</div>
+      <div style="font-size:1.1rem;margin-top:4px;">
+        <span class="badge-x" style="background:{{ color.up if pc>=0 else color.down }};">
+          {{ header.change }} ({{ header.pct_chg|pct }})</span>
+      </div>
+    </div>
+  </div>
+
+  {% if header.is_mock %}
+  <div class="mock-warn">⚠️ 当前为<strong>模拟数据（演示模式）</strong>：未能连接到实时行情接口，
+     以下所有数值与结论仅用于展示报告结构，<strong>不代表真实行情，不构成任何投资参考</strong>。</div>
+  {% endif %}
+
+  {# ============ 综合研判（结论卡片） ============ #}
+  <div class="card-x">
+    <div class="sec-title">综合研判 · 未来 1-3 日</div>
+    <div class="row g-3">
+      {# 操作建议 #}
+      <div class="col-md-3">
+        {% set comp = scoring.composite %}
+        <div class="action-box" style="background:{{ color.up if comp>=55 else (color.down if comp<45 else color.neutral) }};">
+          <div style="font-size:.85rem;opacity:.9;">操作建议</div>
+          <div style="font-size:1.9rem;font-weight:700;">{{ scoring.action }}</div>
+          <div style="font-size:.85rem;margin-top:6px;">建议仓位 ≤ {{ scoring.position }}%</div>
+        </div>
+        <div style="font-size:.82rem;color:#7f8c8d;margin-top:8px;">{{ scoring.action_note }}</div>
+      </div>
+      {# 走势概率 #}
+      <div class="col-md-5">
+        <div style="font-size:.9rem;color:#7f8c8d;margin-bottom:8px;">走势概率分布（主导：{{ scoring.lead }}）</div>
+        {% set d = scoring.distribution %}
+        {% for lab, val, cls in [('看涨', d.up, 'tone-pos'), ('震荡', d.side, 'tone-neutral'), ('看跌', d.down, 'tone-neg')] %}
+        <div class="d-flex align-items-center mb-2">
+          <span class="prob-label">{{ lab }}</span>
+          <div class="progress flex-grow-1" style="height:20px;">
+            <div class="progress-bar {{ cls }}" style="width:{{ (val*100)|round(0) }}%;">{{ (val*100)|round(0) }}%</div>
+          </div>
+        </div>
+        {% endfor %}
+        <div style="font-size:.8rem;color:#95a5a6;margin-top:6px;">
+          综合评分 {{ scoring.composite }} ｜ 年化波动率 {{ scoring.volatility|pct0 }} ｜ 风险等级 {{ scoring.risk_level }}</div>
+      </div>
+      {# 关键价位 #}
+      <div class="col-md-4">
+        <div style="font-size:.9rem;color:#7f8c8d;margin-bottom:6px;">交易参考价位</div>
+        {% set lv = scoring.levels %}
+        {% if lv %}
+        <table class="lv-table" style="width:100%;font-size:.92rem;">
+          <tr><td class="k">入场区间</td><td><strong>{{ lv.entry[0] }} ~ {{ lv.entry[1] }}</strong></td></tr>
+          <tr><td class="k">止损价</td><td class="down"><strong>{{ lv.stop }}</strong>（{{ lv.stop_pct }}%）</td></tr>
+          <tr><td class="k">目标位①</td><td class="up"><strong>{{ lv.target1 }}</strong>（{{ lv.t1_pct }}%）</td></tr>
+          <tr><td class="k">目标位②</td><td class="up"><strong>{{ lv.target2 }}</strong></td></tr>
+          <tr><td class="k">盈亏比</td><td><strong>{{ lv.risk_reward }} : 1</strong></td></tr>
+        </table>
+        {% else %}<div class="text-muted">价位数据不足</div>{% endif %}
+      </div>
+    </div>
+    <div style="margin-top:14px;padding:12px 14px;background:#f8f9fb;border-radius:10px;font-size:.92rem;line-height:1.75;">
+      <strong>走势预测：</strong>{{ scoring.prediction }}</div>
+  </div>
+
+  {# ============ 三维评分 ============ #}
+  <div class="card-x">
+    <div class="sec-title">三维综合评分</div>
+    <div class="row align-items-center">
+      <div class="col-md-5"><div id="radar"></div></div>
+      <div class="col-md-7">
+        <div class="row">
+          {% set sc = scoring.dimension_scores %}
+          {% for nm, val in [('技术面', sc.technical), ('资金面', sc.capital), ('消息面', sc.news), ('综合分', scoring.composite)] %}
+          <div class="col-3">
+            {% set cl = color.up if val>=55 else (color.down if val<45 else color.neutral) %}
+            <div class="ring" style="background:{{ cl }};"><span class="n">{{ val }}</span><span class="t">{{ nm }}</span></div>
+          </div>
+          {% endfor %}
+        </div>
+        <div style="margin-top:16px;font-size:.9rem;color:#7f8c8d;">
+          权重：技术面 45% · 资金面 35% · 消息面 20%。评分 ≥55 偏多（红），≤45 偏空（绿），居中为震荡。</div>
+      </div>
+    </div>
+  </div>
+
+  {# ============ 回测验证 ============ #}
+  {% if backtest.available %}
+  <div class="card-x">
+    <div class="sec-title">评分模型回测验证</div>
+    <div style="font-size:.95rem;line-height:1.75;margin-bottom:10px;">{{ backtest.summary }}</div>
+    {% set bs = backtest.strategy %}{% set bb = backtest.bench %}
+    <div class="row">
+      <div class="col-md-2 col-4"><div class="metric"><div class="v">{{ backtest.ic if backtest.ic is not none else '—' }}</div><div class="l">信息系数 IC</div></div></div>
+      <div class="col-md-2 col-4"><div class="metric"><div class="v {{ 'up' if (bs.total or 0)>=0 else 'down' }}">{{ bs.total }}%</div><div class="l">策略累计收益</div></div></div>
+      <div class="col-md-2 col-4"><div class="metric"><div class="v {{ 'up' if (bb.total or 0)>=0 else 'down' }}">{{ bb.total }}%</div><div class="l">买入持有</div></div></div>
+      <div class="col-md-2 col-4"><div class="metric"><div class="v">{{ bs.sharpe }}</div><div class="l">Sharpe</div></div></div>
+      <div class="col-md-2 col-4"><div class="metric"><div class="v down">{{ bs.mdd }}%</div><div class="l">最大回撤</div></div></div>
+      <div class="col-md-2 col-4"><div class="metric"><div class="v">{{ bs.trades }} / {{ bs.win_rate }}%</div><div class="l">交易数 / 段胜率</div></div></div>
+    </div>
+    <div class="row mt-1">
+      <div class="col-md-7"><div id="equity-chart"></div></div>
+      <div class="col-md-5"><div id="calibration-chart"></div></div>
+    </div>
+    <div style="font-size:.78rem;color:#95a5a6;margin-top:6px;">
+      说明：回测仅基于<strong>技术评分</strong>（资金/消息面缺乏可靠历史对齐数据，不纳入回测）；持仓信号用<strong>前一日</strong>评分、次日生效，严格避免前视偏差。
+      IC 为评分与未来 {{ backtest.hold_days }} 日收益的相关系数（>0.03 视为正向有效）。历史统计不代表未来表现。</div>
+  </div>
+  {% endif %}
+
+  {# ============ 技术面 ============ #}
+  <div class="card-x">
+    <div class="sec-title">技术面分析</div>
+    <div style="font-size:.95rem;line-height:1.75;margin-bottom:6px;">{{ tech.summary }}</div>
+    <div id="main-chart"></div>
+    <div class="row g-3 mt-1">
+      <div class="col-md-4">
+        <div class="signal">
+          <div class="nm">趋势 · {{ tech.trend.state }}</div>
+          <div style="font-size:.85rem;color:#7f8c8d;margin-top:4px;">{{ tech.trend.desc }}</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="signal">
+          <div class="nm">支撑 / 压力位</div>
+          <div style="font-size:.88rem;margin-top:4px;">
+            压力：<span class="up">{{ tech.support_resistance.resistance|join(' / ') or '—' }}</span><br>
+            支撑：<span class="down">{{ tech.support_resistance.support|join(' / ') or '—' }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="signal">
+          <div class="nm">形态识别</div>
+          {% if tech.patterns %}{% for p in tech.patterns %}
+            <div style="font-size:.85rem;margin-top:4px;"><span class="badge-x tone-{{ p.tone }}">{{ p.name }}</span> {{ p.desc }}</div>
+          {% endfor %}{% else %}<div style="font-size:.85rem;color:#7f8c8d;margin-top:4px;">未识别到明显经典形态</div>{% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="row g-2 mt-1">
+      {% for s in tech.signals %}
+      <div class="col-md-4 col-6">
+        <div class="signal">
+          <div class="d-flex justify-content-between"><span class="nm">{{ s.name }}</span>
+            <span class="badge-x tone-{{ s.tone }}">{{ s.status }}</span></div>
+          <div style="font-size:.8rem;color:#7f8c8d;margin-top:4px;">{{ s.desc }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ============ 资金面 ============ #}
+  <div class="card-x">
+    <div class="sec-title">资金面分析</div>
+    <div style="font-size:.95rem;line-height:1.75;margin-bottom:10px;">{{ capital.summary }}</div>
+    {% if capital.available %}
+    <div class="row">
+      <div class="col-4"><div class="metric"><div class="v {{ 'up' if (capital.today_main or 0)>=0 else 'down' }}">{{ capital.today_main|money }}</div><div class="l">当日主力净额</div></div></div>
+      <div class="col-4"><div class="metric"><div class="v {{ 'up' if (capital.sum5 or 0)>=0 else 'down' }}">{{ capital.sum5|money }}</div><div class="l">近5日累计</div></div></div>
+      <div class="col-4"><div class="metric"><div class="v {{ 'up' if (capital.sum10 or 0)>=0 else 'down' }}">{{ capital.sum10|money }}</div><div class="l">近10日累计</div></div></div>
+    </div>
+    <div id="capital-chart"></div>
+    {% if capital.north %}<div id="north-chart"></div>{% endif %}
+    {% else %}<div class="text-muted" style="font-size:.9rem;">资金流数据暂不可用（接口受限或该股无沪深股通通道）。</div>{% endif %}
+  </div>
+
+  {# ============ 消息面 ============ #}
+  <div class="card-x">
+    <div class="sec-title">消息面分析</div>
+    <div style="font-size:.95rem;line-height:1.75;margin-bottom:6px;">{{ news.summary }}</div>
+    <div class="row">
+      <div class="col-md-4"><div id="pie"></div></div>
+      <div class="col-md-8">
+        {% if news.top %}<div style="font-weight:600;margin-bottom:6px;">🔑 最可能影响股价的关键资讯</div>
+        {% for n in news.top %}
+        <div class="news-item">
+          <span class="badge-x tone-{{ n.tone }}">{{ n.sentiment }}</span>
+          <a href="{{ n.url }}" target="_blank">{{ n.title }}</a>
+          <div style="font-size:.78rem;color:#95a5a6;">{{ n.time }} · {{ n.source }}</div>
+        </div>{% endfor %}{% endif %}
+        {% if news['items'] %}<div style="font-weight:600;margin:12px 0 6px;">📰 近期资讯列表</div>
+        <div style="max-height:260px;overflow:auto;">
+        {% for n in news['items'][:15] %}
+        <div class="news-item">
+          <span class="badge-x tone-{{ n.tone }}">{{ n.sentiment }}</span>
+          <a href="{{ n.url }}" target="_blank">{{ n.title }}</a>
+          <span style="font-size:.76rem;color:#95a5a6;"> · {{ n.time }}</span>
+        </div>{% endfor %}</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ============ 数据来源 & 免责 ============ #}
+  <div class="card-x">
+    <div style="margin-bottom:8px;">
+      {% for k, v in header.sources.items() %}<span class="src-pill">{{ k }}: {{ v }}</span>{% endfor %}
+    </div>
+    <div class="disc">
+      <strong>免责声明：</strong>本报告由 astock-watch 程序基于公开数据自动生成，所有分析、评分、预测与价位均为
+      量化模型的机械计算结果，<strong>不构成任何投资建议</strong>。股市有风险，模型存在局限（数据延迟、接口口径差异、
+      指标钝化、黑天鹅事件等），历史规律不代表未来表现。据此操作，风险自负。报告生成时间：{{ gen_time }}。
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const CFG = {responsive:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d']};
+  function plot(id, fig){ try{ if(fig && document.getElementById(id)) Plotly.newPlot(id, fig.data, fig.layout, CFG); }catch(e){ console.error(id, e); } }
+  plot('main-chart', {{ charts.main | safe }});
+  plot('capital-chart', {{ charts.capital | safe }});
+  plot('north-chart', {{ charts.north | safe }});
+  plot('pie', {{ charts.pie | safe }});
+  plot('radar', {{ charts.radar | safe }});
+  plot('equity-chart', {{ charts.equity | safe }});
+  plot('calibration-chart', {{ charts.calibration | safe }});
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 生成的报告产物（运行时输出，不入库）
+reports/
+
+# 个人自选股清单（保留示例 watchlist.example.txt）
+watchlist.txt
+
+# 系统/编辑器
+.DS_Store
+.idea/
+.vscode/

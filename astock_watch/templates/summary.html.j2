@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多股盯盘对比汇总 · {{ gen_date }}</title>
+{% if offline and assets.plotly_js %}<script>{{ assets.plotly_js | safe }}</script>
+{% else %}<script src="{{ cdn.plotly_js }}"></script>{% endif %}
+{% if offline and assets.bootstrap_css %}<style>{{ assets.bootstrap_css | safe }}</style>
+{% else %}<link href="{{ cdn.bootstrap_css }}" rel="stylesheet">
+<link href="{{ cdn.font }}" rel="stylesheet">{% endif %}
+<style>
+  :root{ --up:{{ color.up }}; --down:{{ color.down }}; --neutral:{{ color.neutral }}; }
+  body{ font-family:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif; background:#f4f6f9; color:#2c3e50; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:18px; }
+  .hero{ background:linear-gradient(135deg,#1f3a5f 0%,#2c5282 100%); color:#fff;
+         border-radius:16px; padding:22px 28px; box-shadow:0 6px 20px rgba(31,58,95,.25); }
+  .card-x{ background:#fff; border-radius:14px; box-shadow:0 2px 12px rgba(0,0,0,.06); padding:20px; margin-top:18px; }
+  .sec-title{ font-weight:700; font-size:1.15rem; border-left:4px solid #2c5282; padding-left:10px; margin-bottom:14px; }
+  .up{ color:var(--up); } .down{ color:var(--down); }
+  table.rank{ width:100%; font-size:.92rem; border-collapse:collapse; }
+  table.rank th,table.rank td{ padding:9px 8px; border-bottom:1px solid #f0f0f0; text-align:center; white-space:nowrap; }
+  table.rank th{ background:#f8f9fb; color:#566; font-weight:600; }
+  table.rank td.name{ text-align:left; font-weight:600; }
+  .pill{ display:inline-block; padding:2px 10px; border-radius:10px; color:#fff; font-size:.82rem; font-weight:600; }
+  .scoredot{ display:inline-block; min-width:38px; padding:2px 6px; border-radius:8px; color:#fff; font-size:.82rem; }
+  .disc{ font-size:.8rem; color:#95a5a6; margin-top:22px; line-height:1.7; }
+  a.detail{ color:#2c5282; text-decoration:none; font-weight:600; } a.detail:hover{ text-decoration:underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero d-flex justify-content-between align-items-center flex-wrap">
+    <div>
+      <div style="font-size:1.6rem;font-weight:700;">多股盯盘对比汇总</div>
+      <div style="opacity:.85;margin-top:4px;">共 {{ items|length }} 支 · 报告日期 {{ gen_date }} · 按综合评分降序</div>
+    </div>
+    <div class="text-end" style="opacity:.9;font-size:.9rem;">生成时间<br>{{ gen_time }}</div>
+  </div>
+
+  {% if has_mock %}
+  <div style="background:#fff3cd;border:1px solid #ffe69c;color:#664d03;border-radius:10px;padding:10px 16px;margin-top:14px;font-weight:500;">
+    ⚠️ 部分标的为<strong>模拟数据</strong>（接口未连通），相关结论仅供演示。</div>
+  {% endif %}
+
+  <div class="card-x">
+    <div class="sec-title">三维评分横向对比</div>
+    <div id="comp-chart"></div>
+  </div>
+
+  <div class="card-x">
+    <div class="sec-title">个股研判一览（点击查看详情）</div>
+    <div style="overflow-x:auto;">
+    <table class="rank">
+      <thead><tr>
+        <th>#</th><th>名称 / 代码</th><th>收盘</th><th>涨跌</th>
+        <th>综合</th><th>技术</th><th>资金</th><th>消息</th>
+        <th>操作建议</th><th>走势</th><th>风险</th><th>详情</th>
+      </tr></thead>
+      <tbody>
+      {% for it in items %}
+        {% set comp = it.composite or 0 %}
+        {% set pc = it.pct_chg or 0 %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td class="name">{{ it.name }}<br><span style="color:#95a5a6;font-weight:400;font-size:.8rem;">{{ it.code }}{% if it.is_mock %} · 模拟{% endif %}</span></td>
+          <td>{{ it.close }}</td>
+          <td class="{{ 'up' if pc>=0 else 'down' }}">{{ it.pct_chg|pct }}</td>
+          {% for v in [it.composite, it.technical, it.capital, it.news] %}
+          <td><span class="scoredot" style="background:{{ color.up if (v or 0)>=55 else (color.down if (v or 0)<45 else color.neutral) }};">{{ v }}</span></td>
+          {% endfor %}
+          <td><span class="pill" style="background:{{ color.up if comp>=55 else (color.down if comp<45 else color.neutral) }};">{{ it.action }}</span></td>
+          <td>{{ it.lead }}</td>
+          <td>{{ it.risk_level }}</td>
+          <td><a class="detail" href="{{ it.report_file }}" target="_blank">查看 →</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="card-x">
+    <div class="disc">
+      <strong>免责声明：</strong>本汇总由 astock-watch 自动生成，所有评分与建议为量化模型机械计算结果，
+      <strong>不构成投资建议</strong>。股市有风险，决策需谨慎，据此操作风险自负。生成时间：{{ gen_time }}。
+    </div>
+  </div>
+
+</div>
+<script>
+  const CFG={responsive:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d']};
+  try{ const f={{ comp_chart | safe }}; if(f) Plotly.newPlot('comp-chart', f.data, f.layout, CFG); }catch(e){ console.error(e); }
+</script>
+</body>
+</html>
