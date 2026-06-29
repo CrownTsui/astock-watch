@@ -14,6 +14,23 @@ description: >
 
 对输入的 A 股股票执行技术面 + 资金面 + 消息面三维量化分析，输出交互式 HTML 报告。
 
+## TL;DR 速查
+
+```bash
+cd /path/to/astock-watch
+pip install -r requirements.txt   # 首次
+python run.py                     # 默认自选股 → 盯盘全部标的
+python run.py --symbol 600519     # 单只股票
+python run.py --symbol 600519,000858 --open  # 多只 + 自动打开浏览器
+```
+
+| 用户说 | 执行 |
+|--------|------|
+| "盯盘" / "看盘"（无代码） | `python run.py`（分析 watchlist.txt 自选股） |
+| "帮我看看 XXX" | `python run.py --symbol <代码>` |
+| "分析 A 和 B" | `python run.py --symbol <A代码>,<B代码>` |
+| "生成离线报告" | `python run.py --symbol <代码> --offline` |
+
 ## 执行流程
 
 每一步完成后才能进入下一步；任一步命中失败分支时按失败模式表处理。
