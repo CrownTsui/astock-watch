@@ -3,264 +3,513 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ header.name }}({{ header.code }}) 盯盘分析报告 · {{ header.date }}</title>
+<title>{{ header.name }}({{ header.code }}) · 盯盘报告 · {{ header.date }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
 {% if offline and assets.plotly_js %}<script>{{ assets.plotly_js | safe }}</script>
 {% else %}<script src="{{ cdn.plotly_js }}"></script>{% endif %}
-{% if offline and assets.bootstrap_css %}<style>{{ assets.bootstrap_css | safe }}</style>
-{% else %}<link href="{{ cdn.bootstrap_css }}" rel="stylesheet">
-<link href="{{ cdn.font }}" rel="stylesheet">{% endif %}
 <style>
-  :root{ --up:{{ color.up }}; --down:{{ color.down }}; --neutral:{{ color.neutral }}; }
-  body{ font-family:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif; background:#f4f6f9; color:#2c3e50; }
-  .wrap{ max-width:1180px; margin:0 auto; padding:18px; }
-  .hero{ background:linear-gradient(135deg,#1f3a5f 0%,#2c5282 100%); color:#fff;
-         border-radius:16px; padding:24px 28px; box-shadow:0 6px 20px rgba(31,58,95,.25); }
-  .hero .price{ font-size:2.4rem; font-weight:700; line-height:1; }
-  .card-x{ background:#fff; border-radius:14px; box-shadow:0 2px 12px rgba(0,0,0,.06);
-           padding:20px; margin-top:18px; }
-  .sec-title{ font-weight:700; font-size:1.15rem; border-left:4px solid #2c5282;
-              padding-left:10px; margin-bottom:14px; }
-  .up{ color:var(--up); } .down{ color:var(--down); }
-  .tone-pos{ background:var(--up); color:#fff; }
-  .tone-neg{ background:var(--down); color:#fff; }
-  .tone-neutral{ background:var(--neutral); color:#fff; }
-  .badge-x{ display:inline-block; padding:2px 9px; border-radius:10px; font-size:.78rem; font-weight:500; }
-  .metric{ text-align:center; padding:8px; }
-  .metric .v{ font-size:1.5rem; font-weight:700; } .metric .l{ font-size:.8rem; color:#7f8c8d; }
-  .action-box{ text-align:center; border-radius:12px; padding:18px; color:#fff; }
-  .ring{ width:104px; height:104px; border-radius:50%; display:flex; align-items:center;
-         justify-content:center; flex-direction:column; color:#fff; margin:0 auto; }
-  .ring .n{ font-size:2rem; font-weight:700; line-height:1; } .ring .t{ font-size:.72rem; }
-  .prob-label{ width:48px; display:inline-block; font-size:.85rem; }
-  .lv-table td{ padding:6px 10px; } .lv-table .k{ color:#7f8c8d; }
-  .signal{ border:1px solid #eee; border-radius:10px; padding:10px 12px; height:100%; }
-  .signal .nm{ font-weight:700; } .news-item{ border-bottom:1px solid #f0f0f0; padding:9px 0; }
-  .news-item a{ color:#2c3e50; text-decoration:none; } .news-item a:hover{ color:#2c5282; }
-  .mock-warn{ background:#fff3cd; border:1px solid #ffe69c; color:#664d03;
-              border-radius:10px; padding:10px 16px; margin-top:14px; font-weight:500; }
-  .disc{ font-size:.8rem; color:#95a5a6; margin-top:22px; line-height:1.7; }
-  .src-pill{ font-size:.72rem; color:#7f8c8d; background:#f0f2f5; border-radius:8px; padding:1px 7px; margin-right:6px; }
+  /* ====== Reset & Tokens ====== */
+  *,*::before,*::after{ margin:0; padding:0; box-sizing:border-box; }
+  :root{
+    --bg:       #0D1117;
+    --surface:  #161B22;
+    --border:   #30363D;
+    --gold:     #C9A96E;
+    --gold-dim: #8B7348;
+    --up:       {{ color.up }};
+    --down:     {{ color.down }};
+    --neutral:  {{ color.neutral }};
+    --text:     #F0F6FC;
+    --muted:    #8B949E;
+    --subtle:   #484F58;
+  }
+  body{
+    background: var(--bg); color: var(--text);
+    font-family: 'Noto Sans SC','DM Sans',sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono{ font-family: 'JetBrains Mono','SF Mono','Cascadia Code',monospace; }
+  .wrap{ max-width:1140px; margin:0 auto; padding:20px 16px 40px; }
+
+  /* ====== Top Bar ====== */
+  .topbar{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 0; border-bottom:1px solid var(--border); margin-bottom:20px;
+    font-size:.82rem; color:var(--muted);
+  }
+  .topbar .brand{ font-weight:600; color:var(--text); letter-spacing:.03em; }
+  .topbar .brand span{ color:var(--gold); }
+
+  /* ====== Ticker Strip ====== */
+  .ticker{
+    display:flex; align-items:flex-end; justify-content:space-between;
+    flex-wrap:wrap; gap:16px; padding:8px 0 20px;
+    border-bottom:1px solid var(--gold-dim);
+  }
+  .ticker .info .name{ font-size:1.5rem; font-weight:700; color:var(--text); }
+  .ticker .info .meta{ font-size:.82rem; color:var(--muted); margin-top:4px; }
+  .ticker .info .meta span{ margin-right:16px; }
+  .ticker .price{ text-align:right; }
+  .ticker .price .val{ font-family:'JetBrains Mono',monospace; font-size:2.6rem; font-weight:600; line-height:1; }
+  .ticker .price .chg{ font-size:1rem; margin-top:4px; font-weight:600; }
+  .ticker .price .chg .tag{
+    display:inline-block; padding:2px 10px; border-radius:4px;
+    font-family:'JetBrains Mono',monospace; font-size:.88rem; color:#fff;
+  }
+
+  /* ====== Layout Grid ====== */
+  .row{ display:flex; flex-wrap:wrap; margin:-8px; }
+  .col-3{ flex:0 0 25%; padding:8px; }
+  .col-4{ flex:0 0 33.333%; padding:8px; }
+  .col-5{ flex:0 0 41.666%; padding:8px; }
+  .col-6{ flex:0 0 50%; padding:8px; }
+  .col-7{ flex:0 0 58.333%; padding:8px; }
+  .col-8{ flex:0 0 66.666%; padding:8px; }
+  .col-12{ flex:0 0 100%; padding:8px; }
+  @media(max-width:768px){
+    .col-3,.col-4,.col-5,.col-6,.col-7,.col-8{ flex:0 0 100%; }
+  }
+
+  /* ====== Card ====== */
+  .card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; padding:20px; margin-top:16px;
+  }
+  .card.accent{ border-left:3px solid var(--gold); }
+  .card-title{
+    font-size:.82rem; font-weight:600; color:var(--gold);
+    text-transform:uppercase; letter-spacing:.08em; margin-bottom:16px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .card-title::after{ content:''; flex:1; height:1px; background:var(--border); }
+
+  /* ====== Composite Score ====== */
+  .composite{
+    display:flex; align-items:center; gap:24px; flex-wrap:wrap;
+  }
+  .composite .gauge{
+    position:relative; width:140px; height:140px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .composite .gauge svg{ position:absolute; top:0; left:0; width:100%; height:100%; }
+  .composite .gauge .score-num{
+    font-family:'JetBrains Mono',monospace; font-size:2.8rem; font-weight:700;
+    position:relative; z-index:1;
+  }
+  .composite .gauge .score-sub{
+    position:absolute; bottom:32px; font-size:.72rem; color:var(--muted);
+    text-transform:uppercase; letter-spacing:.1em;
+  }
+  .composite .action-area{ flex:1; }
+  .composite .action-label{
+    font-size:.82rem; color:var(--muted); text-transform:uppercase; letter-spacing:.1em;
+  }
+  .composite .action-name{ font-size:1.6rem; font-weight:700; margin:2px 0 6px; }
+  .composite .action-note{ font-size:.85rem; color:var(--muted); line-height:1.5; }
+  .composite .position{
+    font-family:'JetBrains Mono',monospace; font-size:.88rem; color:var(--gold);
+    margin-top:6px;
+  }
+
+  /* ====== Probability Bars ====== */
+  .prob-row{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .prob-label{ width:40px; font-size:.82rem; font-weight:500; flex-shrink:0; }
+  .prob-track{ flex:1; height:22px; background:var(--bg); border-radius:3px; overflow:hidden; position:relative; }
+  .prob-fill{ height:100%; border-radius:3px; transition:width .6s ease; }
+  .prob-val{ width:44px; font-family:'JetBrains Mono',monospace; font-size:.82rem; text-align:right; flex-shrink:0; }
+
+  /* ====== Dimension Rings ====== */
+  .dim-rings{ display:flex; gap:12px; flex-wrap:wrap; }
+  .dim-ring{ text-align:center; }
+  .dim-ring .ring{
+    width:72px; height:72px; border-radius:50%; display:flex; align-items:center;
+    justify-content:center; font-family:'JetBrains Mono',monospace;
+    font-size:1.3rem; font-weight:700; color:#fff; margin:0 auto 4px;
+  }
+  .dim-ring .label{ font-size:.72rem; color:var(--muted); }
+
+  /* ====== Metric Number ====== */
+  .metric{ text-align:center; }
+  .metric .num{ font-family:'JetBrains Mono',monospace; font-size:1.3rem; font-weight:600; }
+  .metric .lbl{ font-size:.75rem; color:var(--muted); margin-top:2px; }
+
+  /* ====== Level Table ====== */
+  .lv-table{ width:100%; font-size:.85rem; border-collapse:collapse; }
+  .lv-table td{ padding:5px 0; }
+  .lv-table .lv-k{ color:var(--muted); width:80px; }
+  .lv-table .lv-v{ font-family:'JetBrains Mono',monospace; font-weight:600; }
+
+  /* ====== Signal ====== */
+  .signal{
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:6px; padding:12px 14px; height:100%;
+  }
+  .signal .sig-name{ font-weight:600; font-size:.85rem; }
+  .signal .sig-desc{ font-size:.78rem; color:var(--muted); margin-top:4px; line-height:1.5; }
+  .tag{
+    display:inline-block; padding:1px 8px; border-radius:4px;
+    font-size:.72rem; font-weight:600; color:#fff;
+  }
+
+  /* ====== News ====== */
+  .news-item{
+    padding:8px 0; border-bottom:1px solid var(--border);
+    font-size:.85rem; line-height:1.5;
+  }
+  .news-item a{ color:var(--text); text-decoration:none; }
+  .news-item a:hover{ color:var(--gold); }
+  .news-item .meta{ font-size:.75rem; color:var(--muted); }
+
+  /* ====== Chart containers ====== */
+  .chart-box{ min-height:380px; }
+  .chart-box.sm{ min-height:300px; }
+  .chart-box.xs{ min-height:260px; }
+
+  /* ====== Footer ====== */
+  .sources{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .src-pill{
+    font-size:.72rem; padding:3px 10px; border-radius:4px;
+    background:var(--bg); color:var(--muted); border:1px solid var(--border);
+  }
+  .disclaimer{ font-size:.76rem; color:var(--muted); line-height:1.7; }
+
+  /* ====== Utilities ====== */
+  .up{ color:var(--up); }
+  .down{ color:var(--down); }
+  .flex-between{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+  .mt-sm{ margin-top:10px; }
+  .mt-md{ margin-top:16px; }
+  .mb-sm{ margin-bottom:10px; }
+  .gap-sm{ gap:8px; }
+  .text-right{ text-align:right; }
+
+  /* ====== Animation ====== */
+  @keyframes gauge-in{
+    from{ stroke-dashoffset:314; }
+  }
+  .gauge-ring{ animation: gauge-in .8s ease-out forwards; }
+
+  /* ====== Reduced Motion ====== */
+  @media(prefers-reduced-motion:reduce){
+    .gauge-ring{ animation:none; }
+    .prob-fill{ transition:none; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  {# ============ 头部 ============ #}
-  <div class="hero d-flex justify-content-between align-items-center flex-wrap">
-    <div>
-      <div style="font-size:1.7rem;font-weight:700;">{{ header.name }}
-        <span style="font-size:1rem;opacity:.8;">{{ header.code }}.{{ header.market }}</span></div>
-      <div style="opacity:.85;margin-top:4px;">行业：{{ header.industry }} ｜ 报告日期：{{ header.date }}</div>
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="brand">astock-<span>watch</span> · 盯盘报告</div>
+    <div>{{ gen_time }}</div>
+  </div>
+
+  <!-- Ticker Strip -->
+  {% set pc = header.pct_chg or 0 %}
+  <div class="ticker">
+    <div class="info">
+      <div class="name">{{ header.name }}<span style="font-size:.9rem;color:var(--muted);font-weight:400;"> {{ header.code }}.{{ header.market }}</span></div>
+      <div class="meta">
+        <span>行业 {{ header.industry }}</span><span>报告日 {{ header.date }}</span>
+        {% if header.turnover %}<span>换手 {{ "%.2f"|format(header.turnover) }}%</span>{% endif %}
+        {% if header.amount %}<span>成交 {{ header.amount }}</span>{% endif %}
+      </div>
     </div>
-    <div class="text-end">
-      {% set pc = header.pct_chg or 0 %}
-      <div class="price {{ 'up' if pc>=0 else 'down' }}" style="color:#fff;">{{ header.close }}</div>
-      <div style="font-size:1.1rem;margin-top:4px;">
-        <span class="badge-x" style="background:{{ color.up if pc>=0 else color.down }};">
-          {{ header.change }} ({{ header.pct_chg|pct }})</span>
+    <div class="price">
+      <div class="val {{ 'up' if pc>=0 else 'down' }}">{{ header.close }}</div>
+      <div class="chg">
+        <span class="tag" style="background:{{ color.up if pc>=0 else color.down }};">
+          {{ header.change }} &nbsp;{{ header.pct_chg|pct }}
+        </span>
       </div>
     </div>
   </div>
 
   {% if header.is_mock %}
-  <div class="mock-warn">⚠️ 当前为<strong>模拟数据（演示模式）</strong>：未能连接到实时行情接口，
-     以下所有数值与结论仅用于展示报告结构，<strong>不代表真实行情，不构成任何投资参考</strong>。</div>
-  {% endif %}
-
-  {# ============ 综合研判（结论卡片） ============ #}
-  <div class="card-x">
-    <div class="sec-title">综合研判 · 未来 1-3 日</div>
-    <div class="row g-3">
-      {# 操作建议 #}
-      <div class="col-md-3">
-        {% set comp = scoring.composite %}
-        <div class="action-box" style="background:{{ color.up if comp>=55 else (color.down if comp<45 else color.neutral) }};">
-          <div style="font-size:.85rem;opacity:.9;">操作建议</div>
-          <div style="font-size:1.9rem;font-weight:700;">{{ scoring.action }}</div>
-          <div style="font-size:.85rem;margin-top:6px;">建议仓位 ≤ {{ scoring.position }}%</div>
-        </div>
-        <div style="font-size:.82rem;color:#7f8c8d;margin-top:8px;">{{ scoring.action_note }}</div>
-      </div>
-      {# 走势概率 #}
-      <div class="col-md-5">
-        <div style="font-size:.9rem;color:#7f8c8d;margin-bottom:8px;">走势概率分布（主导：{{ scoring.lead }}）</div>
-        {% set d = scoring.distribution %}
-        {% for lab, val, cls in [('看涨', d.up, 'tone-pos'), ('震荡', d.side, 'tone-neutral'), ('看跌', d.down, 'tone-neg')] %}
-        <div class="d-flex align-items-center mb-2">
-          <span class="prob-label">{{ lab }}</span>
-          <div class="progress flex-grow-1" style="height:20px;">
-            <div class="progress-bar {{ cls }}" style="width:{{ (val*100)|round(0) }}%;">{{ (val*100)|round(0) }}%</div>
-          </div>
-        </div>
-        {% endfor %}
-        <div style="font-size:.8rem;color:#95a5a6;margin-top:6px;">
-          综合评分 {{ scoring.composite }} ｜ 年化波动率 {{ scoring.volatility|pct0 }} ｜ 风险等级 {{ scoring.risk_level }}</div>
-      </div>
-      {# 关键价位 #}
-      <div class="col-md-4">
-        <div style="font-size:.9rem;color:#7f8c8d;margin-bottom:6px;">交易参考价位</div>
-        {% set lv = scoring.levels %}
-        {% if lv %}
-        <table class="lv-table" style="width:100%;font-size:.92rem;">
-          <tr><td class="k">入场区间</td><td><strong>{{ lv.entry[0] }} ~ {{ lv.entry[1] }}</strong></td></tr>
-          <tr><td class="k">止损价</td><td class="down"><strong>{{ lv.stop }}</strong>（{{ lv.stop_pct }}%）</td></tr>
-          <tr><td class="k">目标位①</td><td class="up"><strong>{{ lv.target1 }}</strong>（{{ lv.t1_pct }}%）</td></tr>
-          <tr><td class="k">目标位②</td><td class="up"><strong>{{ lv.target2 }}</strong></td></tr>
-          <tr><td class="k">盈亏比</td><td><strong>{{ lv.risk_reward }} : 1</strong></td></tr>
-        </table>
-        {% else %}<div class="text-muted">价位数据不足</div>{% endif %}
-      </div>
-    </div>
-    <div style="margin-top:14px;padding:12px 14px;background:#f8f9fb;border-radius:10px;font-size:.92rem;line-height:1.75;">
-      <strong>走势预测：</strong>{{ scoring.prediction }}</div>
-  </div>
-
-  {# ============ 三维评分 ============ #}
-  <div class="card-x">
-    <div class="sec-title">三维综合评分</div>
-    <div class="row align-items-center">
-      <div class="col-md-5"><div id="radar"></div></div>
-      <div class="col-md-7">
-        <div class="row">
-          {% set sc = scoring.dimension_scores %}
-          {% for nm, val in [('技术面', sc.technical), ('资金面', sc.capital), ('消息面', sc.news), ('综合分', scoring.composite)] %}
-          <div class="col-3">
-            {% set cl = color.up if val>=55 else (color.down if val<45 else color.neutral) %}
-            <div class="ring" style="background:{{ cl }};"><span class="n">{{ val }}</span><span class="t">{{ nm }}</span></div>
-          </div>
-          {% endfor %}
-        </div>
-        <div style="margin-top:16px;font-size:.9rem;color:#7f8c8d;">
-          权重：技术面 45% · 资金面 35% · 消息面 20%。评分 ≥55 偏多（红），≤45 偏空（绿），居中为震荡。</div>
-      </div>
-    </div>
-  </div>
-
-  {# ============ 回测验证 ============ #}
-  {% if backtest.available %}
-  <div class="card-x">
-    <div class="sec-title">评分模型回测验证</div>
-    <div style="font-size:.95rem;line-height:1.75;margin-bottom:10px;">{{ backtest.summary }}</div>
-    {% set bs = backtest.strategy %}{% set bb = backtest.bench %}
-    <div class="row">
-      <div class="col-md-2 col-4"><div class="metric"><div class="v">{{ backtest.ic if backtest.ic is not none else '—' }}</div><div class="l">信息系数 IC</div></div></div>
-      <div class="col-md-2 col-4"><div class="metric"><div class="v {{ 'up' if (bs.total or 0)>=0 else 'down' }}">{{ bs.total }}%</div><div class="l">策略累计收益</div></div></div>
-      <div class="col-md-2 col-4"><div class="metric"><div class="v {{ 'up' if (bb.total or 0)>=0 else 'down' }}">{{ bb.total }}%</div><div class="l">买入持有</div></div></div>
-      <div class="col-md-2 col-4"><div class="metric"><div class="v">{{ bs.sharpe }}</div><div class="l">Sharpe</div></div></div>
-      <div class="col-md-2 col-4"><div class="metric"><div class="v down">{{ bs.mdd }}%</div><div class="l">最大回撤</div></div></div>
-      <div class="col-md-2 col-4"><div class="metric"><div class="v">{{ bs.trades }} / {{ bs.win_rate }}%</div><div class="l">交易数 / 段胜率</div></div></div>
-    </div>
-    <div class="row mt-1">
-      <div class="col-md-7"><div id="equity-chart"></div></div>
-      <div class="col-md-5"><div id="calibration-chart"></div></div>
-    </div>
-    <div style="font-size:.78rem;color:#95a5a6;margin-top:6px;">
-      说明：回测仅基于<strong>技术评分</strong>（资金/消息面缺乏可靠历史对齐数据，不纳入回测）；持仓信号用<strong>前一日</strong>评分、次日生效，严格避免前视偏差。
-      IC 为评分与未来 {{ backtest.hold_days }} 日收益的相关系数（>0.03 视为正向有效）。历史统计不代表未来表现。</div>
+  <div style="background:#3D2E1C;border:1px solid #C9A96E;color:#C9A96E;border-radius:6px;padding:10px 16px;margin-top:12px;font-size:.84rem;font-weight:500;">
+    ⚠️ 模拟数据 — 未能连接到实时行情接口，以下内容仅展示报告结构，不代表真实行情，不构成投资参考。
   </div>
   {% endif %}
 
-  {# ============ 技术面 ============ #}
-  <div class="card-x">
-    <div class="sec-title">技术面分析</div>
-    <div style="font-size:.95rem;line-height:1.75;margin-bottom:6px;">{{ tech.summary }}</div>
-    <div id="main-chart"></div>
-    <div class="row g-3 mt-1">
-      <div class="col-md-4">
-        <div class="signal">
-          <div class="nm">趋势 · {{ tech.trend.state }}</div>
-          <div style="font-size:.85rem;color:#7f8c8d;margin-top:4px;">{{ tech.trend.desc }}</div>
-        </div>
+  <!-- ====== Composite Score (accent card) ====== -->
+  {% set comp = scoring.composite %}
+  <div class="card accent">
+    <div class="card-title">◆ 综合研判 · 未来 1–3 日</div>
+    <div class="composite">
+      <!-- Gauge -->
+      <div class="gauge">
+        <svg viewBox="0 0 140 140">
+          <circle cx="70" cy="70" r="58" fill="none" stroke="var(--border)" stroke-width="10"/>
+          <circle class="gauge-ring" cx="70" cy="70" r="58" fill="none"
+            stroke="{% if comp>=55 %}var(--up){% elif comp<45 %}var(--down){% else %}var(--gold){% endif %}"
+            stroke-width="10" stroke-linecap="round"
+            stroke-dasharray="364.4" stroke-dashoffset="{{ (364.4*(1-comp/100))|round(1) }}"
+            transform="rotate(-90 70 70)"/>
+        </svg>
+        <span class="score-num" style="color:{% if comp>=55 %}var(--up){% elif comp<45 %}var(--down){% else %}var(--gold){% endif %}">{{ comp }}</span>
+        <span class="score-sub">综合分</span>
       </div>
-      <div class="col-md-4">
-        <div class="signal">
-          <div class="nm">支撑 / 压力位</div>
-          <div style="font-size:.88rem;margin-top:4px;">
-            压力：<span class="up">{{ tech.support_resistance.resistance|join(' / ') or '—' }}</span><br>
-            支撑：<span class="down">{{ tech.support_resistance.support|join(' / ') or '—' }}</span>
-          </div>
+      <!-- Action -->
+      <div class="action-area">
+        <div class="action-label">操作建议</div>
+        <div class="action-name" style="color:{% if comp>=55 %}var(--up){% elif comp<45 %}var(--down){% else %}var(--neutral){% endif %}">
+          {{ scoring.action }}
         </div>
-      </div>
-      <div class="col-md-4">
-        <div class="signal">
-          <div class="nm">形态识别</div>
-          {% if tech.patterns %}{% for p in tech.patterns %}
-            <div style="font-size:.85rem;margin-top:4px;"><span class="badge-x tone-{{ p.tone }}">{{ p.name }}</span> {{ p.desc }}</div>
-          {% endfor %}{% else %}<div style="font-size:.85rem;color:#7f8c8d;margin-top:4px;">未识别到明显经典形态</div>{% endif %}
-        </div>
+        <div class="action-note">{{ scoring.action_note }}</div>
+        <div class="position">仓位 ≤ {{ scoring.position }}%</div>
       </div>
     </div>
-    <div class="row g-2 mt-1">
-      {% for s in tech.signals %}
-      <div class="col-md-4 col-6">
-        <div class="signal">
-          <div class="d-flex justify-content-between"><span class="nm">{{ s.name }}</span>
-            <span class="badge-x tone-{{ s.tone }}">{{ s.status }}</span></div>
-          <div style="font-size:.8rem;color:#7f8c8d;margin-top:4px;">{{ s.desc }}</div>
+
+    <!-- Probability Distribution -->
+    {% set d = scoring.distribution %}
+    <div class="mt-md">
+      {% for lab, val, cls in [('看涨', d.up, 'up'), ('震荡', d.side, 'neutral'), ('看跌', d.down, 'down')] %}
+      <div class="prob-row">
+        <span class="prob-label">{{ lab }}</span>
+        <div class="prob-track">
+          <div class="prob-fill" style="width:{{ (val*100)|round(0) }}%;background:var(--{{ cls }});"></div>
         </div>
+        <span class="prob-val">{{ (val*100)|round(0) }}%</span>
       </div>
       {% endfor %}
     </div>
-  </div>
-
-  {# ============ 资金面 ============ #}
-  <div class="card-x">
-    <div class="sec-title">资金面分析</div>
-    <div style="font-size:.95rem;line-height:1.75;margin-bottom:10px;">{{ capital.summary }}</div>
-    {% if capital.available %}
-    <div class="row">
-      <div class="col-4"><div class="metric"><div class="v {{ 'up' if (capital.today_main or 0)>=0 else 'down' }}">{{ capital.today_main|money }}</div><div class="l">当日主力净额</div></div></div>
-      <div class="col-4"><div class="metric"><div class="v {{ 'up' if (capital.sum5 or 0)>=0 else 'down' }}">{{ capital.sum5|money }}</div><div class="l">近5日累计</div></div></div>
-      <div class="col-4"><div class="metric"><div class="v {{ 'up' if (capital.sum10 or 0)>=0 else 'down' }}">{{ capital.sum10|money }}</div><div class="l">近10日累计</div></div></div>
+    <div style="font-size:.78rem;color:var(--muted);margin-top:8px;">
+      主导走势：{{ scoring.lead }} &nbsp;·&nbsp; 年化波动 {{ scoring.volatility|pct0 }} &nbsp;·&nbsp; 风险 {{ scoring.risk_level }}
     </div>
-    <div id="capital-chart"></div>
-    {% if capital.north %}<div id="north-chart"></div>{% endif %}
-    {% else %}<div class="text-muted" style="font-size:.9rem;">资金流数据暂不可用（接口受限或该股无沪深股通通道）。</div>{% endif %}
+    <div style="margin-top:12px;padding:10px 14px;background:var(--bg);border-radius:6px;font-size:.88rem;line-height:1.7;border-left:3px solid var(--border);">
+      <span style="color:var(--gold);font-weight:600;">预测：</span>{{ scoring.prediction }}
+    </div>
   </div>
 
-  {# ============ 消息面 ============ #}
-  <div class="card-x">
-    <div class="sec-title">消息面分析</div>
-    <div style="font-size:.95rem;line-height:1.75;margin-bottom:6px;">{{ news.summary }}</div>
-    <div class="row">
-      <div class="col-md-4"><div id="pie"></div></div>
-      <div class="col-md-8">
-        {% if news.top %}<div style="font-weight:600;margin-bottom:6px;">🔑 最可能影响股价的关键资讯</div>
-        {% for n in news.top %}
-        <div class="news-item">
-          <span class="badge-x tone-{{ n.tone }}">{{ n.sentiment }}</span>
-          <a href="{{ n.url }}" target="_blank">{{ n.title }}</a>
-          <div style="font-size:.78rem;color:#95a5a6;">{{ n.time }} · {{ n.source }}</div>
-        </div>{% endfor %}{% endif %}
-        {% if news['items'] %}<div style="font-weight:600;margin:12px 0 6px;">📰 近期资讯列表</div>
-        <div style="max-height:260px;overflow:auto;">
-        {% for n in news['items'][:15] %}
-        <div class="news-item">
-          <span class="badge-x tone-{{ n.tone }}">{{ n.sentiment }}</span>
-          <a href="{{ n.url }}" target="_blank">{{ n.title }}</a>
-          <span style="font-size:.76rem;color:#95a5a6;"> · {{ n.time }}</span>
-        </div>{% endfor %}</div>{% endif %}
+  <!-- ====== 3D Scoring + Key Levels ====== -->
+  <div class="row">
+    <div class="col-5">
+      <div class="card">
+        <div class="card-title">三维评分</div>
+        <div id="radar" class="chart-box sm"></div>
+        {% set sc = scoring.dimension_scores %}
+        <div class="dim-rings" style="justify-content:center;margin-top:8px;">
+          {% for nm, val in [('技术面', sc.technical), ('资金面', sc.capital), ('消息面', sc.news)] %}
+          <div class="dim-ring">
+            <div class="ring" style="background:{% if val>=55 %}var(--up){% elif val<45 %}var(--down){% else %}var(--neutral){% endif %}">{{ val }}</div>
+            <div class="label">{{ nm }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        <div style="text-align:center;font-size:.75rem;color:var(--muted);margin-top:8px;">
+          权重：技术 45% · 资金 35% · 消息 20%
+        </div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="card">
+        <div class="card-title">交易参考价位</div>
+        {% set lv = scoring.levels %}
+        {% if lv %}
+        <table class="lv-table">
+          <tr><td class="lv-k">入场区间</td><td class="lv-v">{{ lv.entry[0] }} ~ {{ lv.entry[1] }}</td></tr>
+          <tr><td class="lv-k">止损</td><td class="lv-v down">{{ lv.stop }}<span style="font-size:.75rem;"> ({{ lv.stop_pct }}%)</span></td></tr>
+          <tr><td class="lv-k">目标 ①</td><td class="lv-v up">{{ lv.target1 }}<span style="font-size:.75rem;"> (+{{ lv.t1_pct }}%)</span></td></tr>
+          <tr><td class="lv-k">目标 ②</td><td class="lv-v up">{{ lv.target2 }}</td></tr>
+          <tr><td class="lv-k">盈亏比</td><td class="lv-v" style="color:var(--gold);">{{ lv.risk_reward }} : 1</td></tr>
+        </table>
+        {% else %}<div style="color:var(--muted);">价位数据不足</div>{% endif %}
+        <div style="margin-top:16px;font-size:.75rem;color:var(--muted);line-height:1.5;">
+          止损基于 {{ lv.stop_method if lv else 'ATR' }}；目标基于阻力位量度。
+        </div>
+      </div>
+    </div>
+    <div class="col-3">
+      <div class="card">
+        <div class="card-title">风险画像</div>
+        <div class="metric mb-sm">
+          <div class="num" style="color:var(--gold);font-size:1.6rem;">{{ scoring.risk_level }}</div>
+          <div class="lbl">风险等级</div>
+        </div>
+        <div class="metric mb-sm">
+          <div class="num">{{ scoring.volatility|pct0 }}</div>
+          <div class="lbl">年化波动率</div>
+        </div>
+        <div class="metric">
+          <div class="num">{{ scoring.composite }}</div>
+          <div class="lbl">综合评分</div>
+        </div>
       </div>
     </div>
   </div>
 
-  {# ============ 数据来源 & 免责 ============ #}
-  <div class="card-x">
-    <div style="margin-bottom:8px;">
+  <!-- ====== Price Chart ====== -->
+  <div class="card">
+    <div class="card-title">技术面 · K线图</div>
+    <div style="font-size:.88rem;color:var(--muted);margin-bottom:8px;">{{ tech.summary }}</div>
+    <div id="main-chart" class="chart-box"></div>
+  </div>
+
+  <!-- ====== Tech Signals ====== -->
+  <div class="row">
+    <div class="col-4">
+      <div class="card">
+        <div style="font-weight:600;font-size:.85rem;">趋势 · {{ tech.trend.state }}</div>
+        <div style="font-size:.8rem;color:var(--muted);margin-top:4px;line-height:1.5;">{{ tech.trend.desc }}</div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="card">
+        <div style="font-weight:600;font-size:.85rem;">支撑 / 压力</div>
+        <div style="font-size:.85rem;margin-top:6px;line-height:1.7;">
+          压力：<span class="up">{{ tech.support_resistance.resistance|join(' / ') or '—' }}</span><br>
+          支撑：<span class="down">{{ tech.support_resistance.support|join(' / ') or '—' }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="card">
+        <div style="font-weight:600;font-size:.85rem;">形态识别</div>
+        {% if tech.patterns %}
+        {% for p in tech.patterns %}
+        <div style="font-size:.82rem;margin-top:6px;">
+          <span class="tag" style="background:{% if p.tone=='pos' %}var(--up){% elif p.tone=='neg' %}var(--down){% else %}var(--neutral){% endif %}">{{ p.name }}</span>
+          <span style="color:var(--muted);"> {{ p.desc }}</span>
+        </div>
+        {% endfor %}
+        {% else %}<div style="font-size:.82rem;color:var(--muted);margin-top:6px;">未识别到明显经典形态</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Signal Grid -->
+  {% if tech.signals %}
+  <div class="row">
+    {% for s in tech.signals %}
+    <div class="col-4">
+      <div class="signal">
+        <div class="flex-between">
+          <span class="sig-name">{{ s.name }}</span>
+          <span class="tag" style="background:{% if s.tone=='pos' %}var(--up){% elif s.tone=='neg' %}var(--down){% else %}var(--neutral){% endif %}">{{ s.status }}</span>
+        </div>
+        <div class="sig-desc">{{ s.desc }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ====== Capital Flow ====== -->
+  <div class="card">
+    <div class="card-title">资金面分析</div>
+    <div style="font-size:.88rem;color:var(--muted);margin-bottom:10px;">{{ capital.summary }}</div>
+    {% if capital.available %}
+    <div class="row">
+      <div class="col-4"><div class="metric">
+        <div class="num {{ 'up' if (capital.today_main or 0)>=0 else 'down' }}">{{ capital.today_main|money }}</div>
+        <div class="lbl">当日主力净额</div>
+      </div></div>
+      <div class="col-4"><div class="metric">
+        <div class="num {{ 'up' if (capital.sum5 or 0)>=0 else 'down' }}">{{ capital.sum5|money }}</div>
+        <div class="lbl">近 5 日累计</div>
+      </div></div>
+      <div class="col-4"><div class="metric">
+        <div class="num {{ 'up' if (capital.sum10 or 0)>=0 else 'down' }}">{{ capital.sum10|money }}</div>
+        <div class="lbl">近 10 日累计</div>
+      </div></div>
+    </div>
+    <div id="capital-chart" class="chart-box sm mt-sm"></div>
+    {% if capital.north %}<div id="north-chart" class="chart-box sm mt-sm"></div>{% endif %}
+    {% else %}<div style="color:var(--muted);font-size:.85rem;">资金流数据暂不可用（接口受限或该标的无沪深股通通道）。</div>{% endif %}
+  </div>
+
+  <!-- ====== News ====== -->
+  <div class="card">
+    <div class="card-title">消息面分析</div>
+    <div style="font-size:.88rem;color:var(--muted);margin-bottom:6px;">{{ news.summary }}</div>
+    <div class="row">
+      <div class="col-4"><div id="pie" class="chart-box xs"></div></div>
+      <div class="col-8">
+        {% if news.top %}
+        <div style="font-weight:600;font-size:.82rem;color:var(--gold);margin-bottom:8px;">关键资讯</div>
+        {% for n in news.top %}
+        <div class="news-item">
+          <span class="tag" style="background:{% if n.tone=='pos' %}var(--up){% elif n.tone=='neg' %}var(--down){% else %}var(--neutral){% endif %}">{{ n.sentiment }}</span>
+          <a href="{{ n.url }}" target="_blank">{{ n.title }}</a>
+          <div class="meta">{{ n.time }} · {{ n.source }}</div>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% if news['items'] %}
+        <div style="font-weight:600;font-size:.82rem;color:var(--gold);margin:12px 0 8px;">全部资讯</div>
+        <div style="max-height:260px;overflow:auto;">
+        {% for n in news['items'][:15] %}
+        <div class="news-item">
+          <span class="tag" style="background:{% if n.tone=='pos' %}var(--up){% elif n.tone=='neg' %}var(--down){% else %}var(--neutral){% endif %}">{{ n.sentiment }}</span>
+          <a href="{{ n.url }}" target="_blank">{{ n.title }}</a>
+          <span class="meta"> · {{ n.time }}</span>
+        </div>
+        {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== Backtest ====== -->
+  {% if backtest.available %}
+  <div class="card">
+    <div class="card-title">回测验证</div>
+    <div style="font-size:.85rem;color:var(--muted);line-height:1.6;margin-bottom:12px;">{{ backtest.summary }}</div>
+    {% set bs = backtest.strategy %}{% set bb = backtest.bench %}
+    <div class="row">
+      <div class="col-3"><div class="metric"><div class="num">{{ backtest.ic if backtest.ic is not none else '—' }}</div><div class="lbl">IC</div></div></div>
+      <div class="col-3"><div class="metric"><div class="num {{ 'up' if (bs.total or 0)>=0 else 'down' }}">{{ bs.total }}%</div><div class="lbl">策略收益</div></div></div>
+      <div class="col-3"><div class="metric"><div class="num {{ 'up' if (bb.total or 0)>=0 else 'down' }}">{{ bb.total }}%</div><div class="lbl">买入持有</div></div></div>
+      <div class="col-3"><div class="metric"><div class="num">{{ bs.sharpe }}</div><div class="lbl">Sharpe</div></div></div>
+    </div>
+    <div class="row mt-sm">
+      <div class="col-3"><div class="metric"><div class="num down">{{ bs.mdd }}%</div><div class="lbl">最大回撤</div></div></div>
+      <div class="col-3"><div class="metric"><div class="num">{{ bs.trades }}</div><div class="lbl">交易数</div></div></div>
+      <div class="col-3"><div class="metric"><div class="num">{{ bs.win_rate }}%</div><div class="lbl">段胜率</div></div></div>
+    </div>
+    <div class="row mt-sm">
+      <div class="col-7"><div id="equity-chart" class="chart-box sm"></div></div>
+      <div class="col-5"><div id="calibration-chart" class="chart-box sm"></div></div>
+    </div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:8px;line-height:1.6;">
+      * 回测基于技术评分；持仓信号用前一日评分、次日生效，严格无前视偏差。IC 为评分与未来 {{ backtest.hold_days }} 日收益的相关系数（>0.03 正向有效）。历史统计不代表未来表现。
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ====== Sources & Disclaimer ====== -->
+  <div class="card">
+    <div class="sources">
       {% for k, v in header.sources.items() %}<span class="src-pill">{{ k }}: {{ v }}</span>{% endfor %}
     </div>
-    <div class="disc">
-      <strong>免责声明：</strong>本报告由 astock-watch 程序基于公开数据自动生成，所有分析、评分、预测与价位均为
-      量化模型的机械计算结果，<strong>不构成任何投资建议</strong>。股市有风险，模型存在局限（数据延迟、接口口径差异、
-      指标钝化、黑天鹅事件等），历史规律不代表未来表现。据此操作，风险自负。报告生成时间：{{ gen_time }}。
+    <div class="disclaimer">
+      <strong>免责声明：</strong>本报告由 astock-watch 基于公开数据自动生成，所有分析、评分、预测与价位均为量化模型的机械计算结果，<strong>不构成任何投资建议</strong>。股市有风险，模型存在局限（数据延迟、接口口径差异、指标钝化、黑天鹅事件等），历史规律不代表未来表现。据此操作，风险自负。
     </div>
   </div>
 
 </div>
 
 <script>
-  const CFG = {responsive:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d']};
-  function plot(id, fig){ try{ if(fig && document.getElementById(id)) Plotly.newPlot(id, fig.data, fig.layout, CFG); }catch(e){ console.error(id, e); } }
+  const CFG={responsive:true, displaylogo:false, modeBarButtonsToRemove:['lasso2d','select2d'],
+    paper_bgcolor:'#161B22', plot_bgcolor:'#161B22',
+    font:{color:'#8B949E', family:"'Noto Sans SC','DM Sans',sans-serif"},
+    xaxis:{gridcolor:'#30363D', zerolinecolor:'#30363D'},
+    yaxis:{gridcolor:'#30363D', zerolinecolor:'#30363D'}};
+  function plot(id, fig){
+    try{ if(fig && document.getElementById(id)){
+      if(fig.layout){
+        fig.layout.paper_bgcolor='#161B22'; fig.layout.plot_bgcolor='#161B22';
+        fig.layout.font=fig.layout.font||{}; fig.layout.font.color='#8B949E';
+        if(fig.layout.xaxis){ fig.layout.xaxis.gridcolor='#30363D'; fig.layout.xaxis.zerolinecolor='#30363D'; }
+        if(fig.layout.yaxis){ fig.layout.yaxis.gridcolor='#30363D'; fig.layout.yaxis.zerolinecolor='#30363D'; }
+      }
+      Plotly.newPlot(id, fig.data, fig.layout, CFG);
+    }}catch(e){ console.error(id, e); }
+  }
   plot('main-chart', {{ charts.main | safe }});
   plot('capital-chart', {{ charts.capital | safe }});
   plot('north-chart', {{ charts.north | safe }});
